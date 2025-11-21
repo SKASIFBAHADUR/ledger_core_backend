@@ -1,0 +1,70 @@
+PS C:\Users\SHAIK BAHADUR\IdeaProjects\ledgerCore-Banking> .\run-tests.ps1
+1) Health Check
+Health endpoint not found (OK if actuator disabled)
+
+2) Register Admin (idempotent)
+Admin already exists or cannot be created (this is OK)
+
+3) Login Admin
+Access token received.
+Refresh cookie:
+
+4) Create Customer
+Invoke-RestMethod : The remote server returned an error: (403) Forbidden.
+At C:\Users\SHAIK BAHADUR\IdeaProjects\ledgerCore-Banking\run-tests.ps1:69 char:17
++ $custResponse = Invoke-RestMethod `
++                 ~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidOperation: (System.Net.HttpWebRequest:HttpWebRequest) [Invoke-RestMethod], WebExc
+   eption
+    + FullyQualifiedErrorId : WebCmdletWebResponseException,Microsoft.PowerShell.Commands.InvokeRestMethodCommand
+
+Customer created with ID:
+
+5) Create Account
+Invoke-RestMethod : The remote server returned an error: (403) Forbidden.
+At C:\Users\SHAIK BAHADUR\IdeaProjects\ledgerCore-Banking\run-tests.ps1:84 char:16
++ $accResponse = Invoke-RestMethod `
++                ~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidOperation: (System.Net.HttpWebRequest:HttpWebRequest) [Invoke-RestMethod], WebExc
+   eption
+    + FullyQualifiedErrorId : WebCmdletWebResponseException,Microsoft.PowerShell.Commands.InvokeRestMethodCommand
+
+Account created with ID:
+
+6) Deposit with Idempotency (first call)
+Invoke-RestMethod : The remote server returned an error: (403) Forbidden.
+At C:\Users\SHAIK BAHADUR\IdeaProjects\ledgerCore-Banking\run-tests.ps1:102 char:9
++ $dep1 = Invoke-RestMethod `
++         ~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidOperation: (System.Net.HttpWebRequest:HttpWebRequest) [Invoke-RestMethod], WebExc
+   eption
+    + FullyQualifiedErrorId : WebCmdletWebResponseException,Microsoft.PowerShell.Commands.InvokeRestMethodCommand
+
+Transaction ID:
+
+7) Deposit again with SAME idempotency key
+Invoke-RestMethod : The remote server returned an error: (403) Forbidden.
+At C:\Users\SHAIK BAHADUR\IdeaProjects\ledgerCore-Banking\run-tests.ps1:113 char:9
++ $dep2 = Invoke-RestMethod `
++         ~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidOperation: (System.Net.HttpWebRequest:HttpWebRequest) [Invoke-RestMethod], WebExc
+   eption
+    + FullyQualifiedErrorId : WebCmdletWebResponseException,Microsoft.PowerShell.Commands.InvokeRestMethodCommand
+
+Idempotency Verified
+
+8) Withdraw large amount (should fail)
+Withdraw failed as expected
+
+9) Refresh Token Rotation
+No refresh cookie found, skipping refresh test.
+
+10) Logout
+Logged out
+Logged out
+
+11) Try using OLD access token (should fail)  tell the solution of error
+Old token rejected. Logout and blacklist working.
+
+=====================================
+      ALL TESTS COMPLETED SUCCESS

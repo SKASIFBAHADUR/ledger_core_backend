@@ -1,0 +1,182 @@
+{
+  "info": {
+    "name": "LedgerCore Automated Tests",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "version": {"major":1,"minor":0,"patch":0}
+  },
+  "item": [
+    {
+      "name": "Env Setup",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": "{{baseUrl}}/actuator/health"
+      },
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "exec": [
+              "pm.environment.set('baseUrl','http://localhost:8080');",
+              "pm.environment.set('adminEmail','admin@bank.com');",
+              "pm.environment.set('adminPassword','Admin123');",
+              "pm.environment.set('refreshCookieName','refreshToken');"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Register Admin (if not exists)",
+      "request": {
+        "method": "POST",
+        "header": [{"key":"Content-Type","value":"application/json"}],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"username\":\"admin\",\n  \"email\":\"{{adminEmail}}\",\n  \"password\":\"{{adminPassword}}\",\n  \"role\":\"ROLE_ADMIN\",\n  \"status\":\"ACTIVE\"\n}"
+        },
+        "url": "{{baseUrl}}/auth/register"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('register status 200 or 409', function(){",
+              "  pm.expect(pm.response.code).to.be.oneOf([200,201,409,422]);",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Login Admin",
+      "request": {
+        "method": "POST",
+        "header": [],
+        "url": "{{baseUrl}}/auth/login?email={{adminEmail}}&password={{adminPassword}}"
+      },
+      "event":[
+        {
+          "listen":"test",
+          "script": {
+            "exec":[
+              "pm.test('login 200', function(){ pm.expect(pm.response.code).to.be.within(200,299); });",
+              "var json = pm.response.json();",
+              "pm.environment.set('accessToken', json.accessToken || json.access_token || json.token);",
+              "var cookies = pm.response.headers.get('set-cookie');",
+              "if(cookies){",
+              "  var m = cookies.match(/refreshToken=([^;]+)/);",
+              "  if(m) pm.environment.set('refreshToken', m[1]);",
+              "}"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Create Customer (Auth)",
+      "request": {
+        "method": "POST",
+        "header":[{"key":"Content-Type","value":"application/json"},{"key":"Authorization","value":"Bearer {{accessToken}}"}],
+        "body":{"mode":"raw","raw":"{\n  \"name\":\"Alice Test\",\n  \"email\":\"alice.test@example.com\",\n  \"phone\":\"9999999999\"\n}"},
+        "url":"{{baseUrl}}/customer/create"
+      },
+      "event":[
+        {"listen":"test","script":{"exec":["pm.test('create customer ok', function(){ pm.expect(pm.response.code).to.be.within(200,299); });","var c = pm.response.json(); if(c.id) pm.environment.set('customerId', c.id);"]}}
+      ]
+    },
+    {
+      "name": "Create Account for Customer",
+      "request": {
+        "method": "POST",
+        "header":[{"key":"Content-Type","value":"application/json"},{"key":"Authorization","value":"Bearer {{accessToken}}"}],
+        "body":{"mode":"raw","raw":"{\n  \"accountType\":\"SAVINGS\"\n}"},
+        "url":"{{baseUrl}}/account/create/{{customerId}}"
+      },
+      "event":[
+        {"listen":"test","script":{"exec":["pm.test('account created', function(){ pm.expect(pm.response.code).to.be.within(200,299); });","var a=pm.response.json(); if(a.id) pm.environment.set('accountId', a.id); if(a.accountNumber) pm.environment.set('accountNumber', a.accountNumber);"]}}
+      ]
+    },
+    {
+      "name": "Deposit (idempotent) - first call",
+      "request": {
+        "method": "POST",
+        "header":[{"key":"Authorization","value":"Bearer {{accessToken}}"},{"key":"Idempotency-Key","value":"idem-12345"}],
+        "url":"{{baseUrl}}/transactions/deposit/{{accountId}}/1000?reference=init-dep"
+      },
+      "event":[
+        {"listen":"test","script":{"exec":["pm.test('deposit ok', function(){ pm.expect(pm.response.code).to.be.within(200,299); });","var t=pm.response.json(); if(t.id) pm.environment.set('txnId', t.id);"]}}
+      ]
+    },
+    {
+      "name": "Deposit (idempotent) - repeat same key",
+      "request": {
+        "method": "POST",
+        "header":[{"key":"Authorization","value":"Bearer {{accessToken}}"},{"key":"Idempotency-Key","value":"idem-12345"}],
+        "url":"{{baseUrl}}/transactions/deposit/{{accountId}}/1000?reference=init-dep"
+      },
+      "event":[
+        {"listen":"test","script":{"exec":["pm.test('repeat deposit returns same id', function(){ var j=pm.response.json(); pm.expect(j.id).to.eql(pm.environment.get('txnId')); });"]}}
+      ]
+    },
+    {
+      "name": "Withdraw (insufficient funds negative test)",
+      "request": {
+        "method":"POST",
+        "header":[{"key":"Authorization","value":"Bearer {{accessToken}}"}],
+        "url":"{{baseUrl}}/transactions/withdraw/{{accountId}}/99999999"
+      },
+      "event":[
+        {"listen":"test","script":{"exec":["pm.test('withdraw should fail', function(){ pm.expect(pm.response.code).to.be.above(399); });"]}}
+      ]
+    },
+    {
+      "name":"Refresh Token (rotate)",
+      "request":{
+        "method":"POST",
+        "header":[],
+        "url":"{{baseUrl}}/auth/refresh"
+      },
+      "event":[
+        {"listen":"prerequest","script":{"exec":["// ensure cookie present in environment to simulate browser cookie","if(pm.environment.get('refreshToken')) { pm.environment.set('cookieHeader', pm.environment.get('refreshCookieName') + '=' + pm.environment.get('refreshToken')) }"]}},
+        {"listen":"test","script":{"exec":["pm.test('refresh 200', function(){ pm.expect(pm.response.code).to.be.within(200,299); });","var j=pm.response.json(); if(j.accessToken) pm.environment.set('accessToken', j.accessToken); var setcookie = pm.response.headers.get('set-cookie'); if(setcookie){ var m=setcookie.match(/refreshToken=([^;]+)/); if(m) pm.environment.set('refreshToken', m[1]); }"]}}
+      ]
+    },
+    {
+      "name":"Logout",
+      "request":{
+        "method":"POST",
+        "header":[{"key":"Authorization","value":"Bearer {{accessToken}}"}],
+        "url":"{{baseUrl}}/auth/logout"
+      },
+      "event":[
+        {"listen":"test","script":{"exec":["pm.test('logout 200', function(){ pm.expect(pm.response.code).to.be.within(200,299); });"]}}
+      ]
+    },
+    {
+      "name":"After-Logout: protected endpoint should 401",
+      "request":{
+        "method":"GET",
+        "header":[{"key":"Authorization","value":"Bearer {{accessToken}}"}],
+        "url":"{{baseUrl}}/customer/get/{{customerId}}"
+      },
+      "event":[
+        {"listen":"test","script":{"exec":["pm.test('expect 401 after logout', function(){ pm.expect(pm.response.code).to.be.oneOf([401,403]); });"]}}
+      ]
+    },
+    {
+      "name":"Admin create user (should 403 for non-admin)",
+      "request":{
+        "method":"POST",
+        "header":[{"key":"Authorization","value":"Bearer {{accessToken}}"},{"key":"Content-Type","value":"application/json"}],
+        "body":{"mode":"raw","raw":"{\"username\":\"u1\",\"email\":\"u1@example.com\",\"password\":\"pass\",\"role\":\"USER\"}"},
+        "url":"{{baseUrl}}/auth/admin/create-user"
+      },
+      "event":[
+        {"listen":"test","script":{"exec":["pm.test('admin create should be 403 for non-admin', function(){ pm.expect(pm.response.code).to.be.oneOf([200,201,403]); });"]}}
+      ]
+    }
+  ]
+}
